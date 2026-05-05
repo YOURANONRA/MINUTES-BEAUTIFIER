@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://youranonra.github.io/MINUTES-BEAUTIFIER/sitemap.xml
+
