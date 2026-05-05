@@ -1,0 +1,866 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Meeting Minutes Beautifier</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@700&display=swap" rel="stylesheet" />
+    <style>
+      /* ── Base ── */
+      *, *::before, *::after { box-sizing: border-box; }
+
+      body {
+        font-family: 'Inter', sans-serif;
+        margin: 0;
+        height: 100vh;
+        overflow: hidden;
+        background: #f0f4f8;
+      }
+
+      ::-webkit-scrollbar { width: 6px; }
+      ::-webkit-scrollbar-track { background: transparent; }
+      ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+
+      /* ── Layout ── */
+      #app { display: flex; flex-direction: column; height: 100vh; }
+
+      header {
+        background: #fff;
+        border-bottom: 1px solid #e2e8f0;
+        padding: 0 1.5rem;
+        height: 56px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-shrink: 0;
+        z-index: 10;
+      }
+
+      .split {
+        display: flex;
+        flex: 1;
+        overflow: hidden;
+      }
+
+      .pane {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+
+      .pane-header {
+        padding: 0.75rem 1.25rem;
+        background: #fff;
+        border-bottom: 1px solid #e2e8f0;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-shrink: 0;
+      }
+
+      .pane-header span {
+        font-size: 0.75rem;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: #64748b;
+      }
+
+      .divider {
+        width: 4px;
+        background: #e2e8f0;
+        cursor: col-resize;
+        flex-shrink: 0;
+        transition: background 0.2s;
+      }
+      .divider:hover, .divider.dragging { background: #3b82f6; }
+
+      #editor {
+        flex: 1;
+        resize: none;
+        border: none;
+        outline: none;
+        padding: 1.5rem;
+        font-size: 0.875rem;
+        line-height: 1.75;
+        font-family: 'Menlo', 'Consolas', monospace;
+        background: #fafafa;
+        color: #1e293b;
+        overflow-y: auto;
+      }
+
+      #preview {
+        flex: 1;
+        overflow-y: auto;
+        padding: 2rem 2.5rem;
+        background: #fff;
+      }
+
+      /* ── Theme Variables ── */
+      body.theme-corporate {
+        --accent: #1d4ed8;
+        --accent-light: #dbeafe;
+        --heading-font: 'Inter', sans-serif;
+        --preview-bg: #ffffff;
+        --preview-color: #1e293b;
+        --decision-border: #16a34a;
+        --decision-bg: #f0fdf4;
+        --decision-color: #14532d;
+        --action-bg: #fefce8;
+        --action-border: #ca8a04;
+        --date-bg: #dbeafe;
+        --date-color: #1e40af;
+        --header-color: #1d4ed8;
+        --divider-color: #bfdbfe;
+      }
+
+      body.theme-dark {
+        --accent: #38bdf8;
+        --accent-light: #1e293b;
+        --heading-font: 'Inter', sans-serif;
+        --preview-bg: #0f172a;
+        --preview-color: #e2e8f0;
+        --decision-border: #34d399;
+        --decision-bg: #022c22;
+        --decision-color: #a7f3d0;
+        --action-bg: #1c1917;
+        --action-border: #fbbf24;
+        --date-bg: #1e3a5f;
+        --date-color: #7dd3fc;
+        --header-color: #38bdf8;
+        --divider-color: #334155;
+        background: #0f172a;
+      }
+      body.theme-dark #editor { background: #1e293b; color: #cbd5e1; }
+      body.theme-dark .pane-header { background: #1e293b; border-color: #334155; }
+      body.theme-dark header { background: #1e293b; border-color: #334155; }
+      body.theme-dark .divider { background: #334155; }
+      body.theme-dark #preview { background: var(--preview-bg); }
+      body.theme-dark .pane-header span { color: #94a3b8; }
+      body.theme-dark #char-count { color: #64748b; }
+      body.theme-dark footer { background: #1e293b; border-color: #334155; }
+
+      body.theme-minimalist {
+        --accent: #374151;
+        --accent-light: #f9fafb;
+        --heading-font: 'Playfair Display', Georgia, serif;
+        --preview-bg: #fffef7;
+        --preview-color: #111827;
+        --decision-border: #374151;
+        --decision-bg: #f9fafb;
+        --decision-color: #111827;
+        --action-bg: #fffbeb;
+        --action-border: #374151;
+        --date-bg: #e5e7eb;
+        --date-color: #374151;
+        --header-color: #111827;
+        --divider-color: #d1d5db;
+      }
+      body.theme-minimalist #preview { background: var(--preview-bg); }
+
+      /* ── Preview Styles ── */
+      #preview {
+        background: var(--preview-bg, #fff);
+        color: var(--preview-color, #1e293b);
+        transition: background 0.3s, color 0.3s;
+      }
+
+      .preview-h1 {
+        font-family: var(--heading-font, 'Inter', sans-serif);
+        font-size: 1.75rem;
+        font-weight: 700;
+        color: var(--header-color, #1d4ed8);
+        margin: 0.5rem 0 0.25rem;
+        line-height: 1.2;
+        padding-bottom: 0.5rem;
+        border-bottom: 2px solid var(--divider-color, #bfdbfe);
+      }
+
+      .preview-h2 {
+        font-family: var(--heading-font, 'Inter', sans-serif);
+        font-size: 1.25rem;
+        font-weight: 600;
+        color: var(--header-color, #1d4ed8);
+        margin: 1.25rem 0 0.25rem;
+      }
+
+      .preview-action {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.6rem;
+        background: var(--action-bg, #fefce8);
+        border-left: 3px solid var(--action-border, #ca8a04);
+        padding: 0.6rem 0.875rem;
+        border-radius: 0 6px 6px 0;
+        margin: 0.4rem 0;
+        font-weight: 500;
+        font-size: 0.875rem;
+        transition: background 0.3s;
+      }
+
+      .preview-action .checkbox {
+        width: 16px;
+        height: 16px;
+        border: 2px solid var(--action-border, #ca8a04);
+        border-radius: 3px;
+        flex-shrink: 0;
+        margin-top: 2px;
+        cursor: pointer;
+        transition: background 0.15s;
+        position: relative;
+      }
+      .preview-action .checkbox.checked {
+        background: var(--action-border, #ca8a04);
+      }
+      .preview-action .checkbox.checked::after {
+        content: '';
+        position: absolute;
+        left: 3px; top: 0px;
+        width: 5px; height: 9px;
+        border: 2px solid #fff;
+        border-top: none;
+        border-left: none;
+        transform: rotate(45deg);
+      }
+
+      .preview-decision {
+        background: var(--decision-bg, #f0fdf4);
+        border: 1.5px solid var(--decision-border, #16a34a);
+        border-radius: 8px;
+        padding: 0.625rem 1rem;
+        margin: 0.4rem 0;
+        font-size: 0.875rem;
+        color: var(--decision-color, #14532d);
+        font-weight: 500;
+        transition: background 0.3s;
+      }
+      .preview-decision::before {
+        content: 'DECISION  ';
+        font-size: 0.65rem;
+        font-weight: 700;
+        letter-spacing: 0.1em;
+        color: var(--decision-border, #16a34a);
+        margin-right: 0.4rem;
+      }
+
+      .preview-date {
+        display: inline-block;
+        background: var(--date-bg, #dbeafe);
+        color: var(--date-color, #1e40af);
+        font-size: 0.7rem;
+        font-weight: 600;
+        padding: 0.15rem 0.6rem;
+        border-radius: 9999px;
+        letter-spacing: 0.03em;
+        transition: background 0.3s;
+      }
+
+      .preview-owner {
+        font-weight: 700;
+        color: var(--accent, #1d4ed8);
+        background: var(--accent-light, #dbeafe);
+        padding: 0.05rem 0.4rem;
+        border-radius: 4px;
+        font-size: 0.85em;
+      }
+
+      .preview-p {
+        margin: 0.3rem 0;
+        line-height: 1.75;
+        font-size: 0.9rem;
+      }
+
+      .preview-hr {
+        border: none;
+        border-top: 1px solid var(--divider-color, #bfdbfe);
+        margin: 1rem 0;
+      }
+
+      /* ── Toolbar ── */
+      .toolbar-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        padding: 0.35rem 0.75rem;
+        border-radius: 6px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        border: 1px solid #e2e8f0;
+        background: #fff;
+        color: #374151;
+        cursor: pointer;
+        transition: background 0.15s, border-color 0.15s, color 0.15s;
+        white-space: nowrap;
+      }
+      .toolbar-btn:hover { background: #f1f5f9; border-color: #cbd5e1; }
+      .toolbar-btn.primary { background: #1d4ed8; border-color: #1d4ed8; color: #fff; }
+      .toolbar-btn.primary:hover { background: #1e40af; }
+      .toolbar-btn.danger { color: #dc2626; border-color: #fca5a5; }
+      .toolbar-btn.danger:hover { background: #fef2f2; }
+
+      body.theme-dark .toolbar-btn { background: #1e293b; border-color: #334155; color: #cbd5e1; }
+      body.theme-dark .toolbar-btn:hover { background: #334155; }
+      body.theme-dark .toolbar-btn.primary { background: #0284c7; border-color: #0284c7; color: #fff; }
+
+      select.theme-select {
+        padding: 0.35rem 2rem 0.35rem 0.625rem;
+        border-radius: 6px;
+        border: 1px solid #e2e8f0;
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: #374151;
+        background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E") no-repeat right 0.5rem center;
+        -webkit-appearance: none;
+        cursor: pointer;
+        outline: none;
+      }
+      body.theme-dark select.theme-select { background-color: #1e293b; border-color: #334155; color: #cbd5e1; }
+
+      #char-count { font-size: 0.7rem; color: #94a3b8; }
+
+      /* ── Toast ── */
+      #toast {
+        position: fixed;
+        bottom: 1.5rem;
+        left: 50%;
+        transform: translateX(-50%) translateY(2rem);
+        background: #1e293b;
+        color: #fff;
+        padding: 0.5rem 1.25rem;
+        border-radius: 8px;
+        font-size: 0.8rem;
+        font-weight: 500;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.2s, transform 0.2s;
+        z-index: 999;
+      }
+      #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+      /* ── Footer ── */
+      footer {
+        padding: 0.5rem 1.5rem;
+        background: #fff;
+        border-top: 1px solid #e2e8f0;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-shrink: 0;
+      }
+      .privacy-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        font-size: 0.7rem;
+        color: #64748b;
+        font-weight: 500;
+      }
+
+      /* ── Help Panel ── */
+      #help-panel {
+        position: fixed;
+        top: 0; right: -340px;
+        width: 320px;
+        height: 100vh;
+        background: #fff;
+        border-left: 1px solid #e2e8f0;
+        box-shadow: -4px 0 24px rgba(0,0,0,0.08);
+        z-index: 100;
+        transition: right 0.3s ease;
+        overflow-y: auto;
+        padding: 1.5rem;
+      }
+      #help-panel.open { right: 0; }
+      body.theme-dark #help-panel { background: #1e293b; border-color: #334155; color: #cbd5e1; }
+
+      .syntax-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0.5rem 0;
+        border-bottom: 1px solid #f1f5f9;
+        font-size: 0.78rem;
+      }
+      .syntax-code { font-family: monospace; background: #f1f5f9; padding: 0.15rem 0.4rem; border-radius: 4px; color: #1e293b; }
+      body.theme-dark .syntax-code { background: #0f172a; color: #e2e8f0; }
+      body.theme-dark .syntax-row { border-color: #334155; }
+
+      @keyframes fadeInDown {
+        from { opacity: 0; transform: translateY(-8px); }
+        to   { opacity: 1; transform: translateY(0); }
+      }
+
+      /* ── Print Styles ── */
+      @media print {
+        @page { size: A4; margin: 20mm 18mm; }
+
+        body { overflow: visible !important; height: auto !important; background: #fff !important; }
+        #app { height: auto !important; overflow: visible !important; }
+
+        header,
+        footer,
+        .no-print,
+        #help-panel,
+        #toast,
+        .divider,
+        #editor-pane { display: none !important; }
+
+        .split { display: block !important; }
+
+        #preview-pane {
+          width: 100% !important;
+          flex: none !important;
+          overflow: visible !important;
+          height: auto !important;
+        }
+
+        #preview {
+          overflow: visible !important;
+          padding: 0 !important;
+          background: #fff !important;
+          color: #000 !important;
+          height: auto !important;
+        }
+
+        .pane-header { display: none !important; }
+
+        .preview-h1 { color: #1d4ed8 !important; border-bottom-color: #bfdbfe !important; }
+        .preview-h2 { color: #1d4ed8 !important; }
+        .preview-action { background: #fefce8 !important; border-left-color: #ca8a04 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        .preview-decision { background: #f0fdf4 !important; border-color: #16a34a !important; color: #14532d !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        .preview-date { background: #dbeafe !important; color: #1e40af !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        .preview-owner { color: #1d4ed8 !important; background: #dbeafe !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      }
+    </style>
+    <meta property="og:image" content="https://bolt.new/static/og_default.png">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:image" content="https://bolt.new/static/og_default.png">
+</head>
+  <body class="theme-corporate">
+    <div id="app">
+
+      <!-- Header -->
+      <header class="no-print" style="animation: fadeInDown 0.35s ease both;">
+        <div style="display:flex;align-items:center;gap:0.75rem;">
+          <svg width="30" height="30" viewBox="0 0 30 30" fill="none">
+            <rect width="30" height="30" rx="8" fill="#1d4ed8"/>
+            <path d="M8 10h14M8 14.5h9M8 19h11" stroke="#fff" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+          <div>
+            <div style="font-size:0.95rem;font-weight:700;color:#1e293b;line-height:1.1;">Minutes Beautifier</div>
+            <div style="font-size:0.65rem;color:#64748b;font-weight:500;">Meeting Notes, Instantly Formatted</div>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;">
+          <select class="theme-select" id="theme-select" title="Change theme">
+            <option value="theme-corporate">Corporate Blue</option>
+            <option value="theme-dark">Modern Dark</option>
+            <option value="theme-minimalist">Minimalist</option>
+          </select>
+          <button class="toolbar-btn" id="help-btn">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            Syntax
+          </button>
+          <button class="toolbar-btn" id="load-sample-btn">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            Sample
+          </button>
+          <button class="toolbar-btn" id="copy-btn">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            Copy HTML
+          </button>
+          <button class="toolbar-btn primary" id="print-btn">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+            Print / PDF
+          </button>
+        </div>
+      </header>
+
+      <!-- Split Layout -->
+      <div class="split">
+
+        <!-- Editor Pane -->
+        <div class="pane no-print" id="editor-pane">
+          <div class="pane-header">
+            <span>Editor</span>
+            <div style="display:flex;align-items:center;gap:0.5rem;">
+              <span id="char-count">0 chars</span>
+              <button class="toolbar-btn danger" id="clear-btn" style="padding:0.2rem 0.5rem;font-size:0.68rem;">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+                Clear
+              </button>
+            </div>
+          </div>
+          <textarea id="editor" spellcheck="false" placeholder="Start typing your meeting notes...
+
+# Q3 Strategy Meeting
+Date: 2026-01-15
+
+## Attendees
+Owner: @Alice @Bob @Carol
+
+## Decisions
+Decision: Adopt new CI/CD pipeline.
+Action: @Bob will set up GitHub Actions by next Friday.
+Action: @Carol will document the deployment process.
+
+---
+
+Use # for headers, Action: for tasks,
+Decision: for decisions, Date: for pills, @Name for owners."></textarea>
+        </div>
+
+        <!-- Drag Divider -->
+        <div class="divider no-print" id="divider"></div>
+
+        <!-- Preview Pane -->
+        <div class="pane" id="preview-pane">
+          <div class="pane-header no-print">
+            <span>Live Preview</span>
+            <span id="block-count" style="font-size:0.7rem;color:#94a3b8;font-weight:500;">0 blocks</span>
+          </div>
+          <div id="preview"></div>
+        </div>
+
+      </div>
+
+      <!-- Footer -->
+      <footer class="no-print">
+        <div class="privacy-badge">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          Your data never leaves your browser. 100% Private.
+        </div>
+        <div style="font-size:0.68rem;color:#94a3b8;">Auto-saved to local storage</div>
+      </footer>
+
+    </div>
+
+    <!-- Help Panel -->
+    <div id="help-panel">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;">
+        <span style="font-weight:700;font-size:0.95rem;">Syntax Reference</span>
+        <button class="toolbar-btn" id="help-close-btn" style="padding:0.2rem 0.5rem;">Close</button>
+      </div>
+      <div class="syntax-row">
+        <span class="syntax-code"># Title</span>
+        <span style="color:#1d4ed8;font-weight:600;font-size:0.75rem;">Large Header</span>
+      </div>
+      <div class="syntax-row">
+        <span class="syntax-code">## Subtitle</span>
+        <span style="color:#1d4ed8;font-size:0.75rem;font-weight:500;">Section Header</span>
+      </div>
+      <div class="syntax-row">
+        <span class="syntax-code">Action: text</span>
+        <span style="font-size:0.75rem;color:#ca8a04;font-weight:600;">Checkbox Item</span>
+      </div>
+      <div class="syntax-row">
+        <span class="syntax-code">Decision: text</span>
+        <span style="font-size:0.75rem;color:#16a34a;font-weight:600;">Decision Box</span>
+      </div>
+      <div class="syntax-row">
+        <span class="syntax-code">Date: value</span>
+        <span style="font-size:0.75rem;color:#1d4ed8;font-weight:600;">Date Pill Badge</span>
+      </div>
+      <div class="syntax-row">
+        <span class="syntax-code">@Name</span>
+        <span style="font-size:0.75rem;color:#1d4ed8;font-weight:600;">Owner Tag</span>
+      </div>
+      <div class="syntax-row">
+        <span class="syntax-code">---</span>
+        <span style="font-size:0.75rem;color:#64748b;">Horizontal Divider</span>
+      </div>
+      <div style="margin-top:1.25rem;padding:0.75rem;background:#f8fafc;border-radius:8px;font-size:0.72rem;line-height:1.6;color:#475569;">
+        <strong>Tips</strong><br/>
+        Click checkboxes in preview to tick them off.<br/>
+        Switch themes before printing for a different look.<br/>
+        Use Ctrl+P or Print / PDF to export A4.
+      </div>
+    </div>
+
+    <!-- Toast -->
+    <div id="toast"></div>
+
+    <script>
+      // ── Constants ──────────────────────────────────────────────────────────
+      const STORAGE_KEY = 'mmb_content_v1';
+      const THEME_KEY   = 'mmb_theme_v1';
+      const THEMES      = ['theme-corporate', 'theme-dark', 'theme-minimalist'];
+
+      const editor      = document.getElementById('editor');
+      const preview     = document.getElementById('preview');
+      const themeSelect = document.getElementById('theme-select');
+      const charCount   = document.getElementById('char-count');
+      const blockCount  = document.getElementById('block-count');
+
+      // ── HTML escaping ──────────────────────────────────────────────────────
+      function esc(str) {
+        return str
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;');
+      }
+
+      // ── Inline patterns (Date pill, @owner) ───────────────────────────────
+      function parseInline(text) {
+        text = text.replace(
+          /\bDate:\s*([^@\n]+?)(?=\s*@|\s*$)/gi,
+          (_, v) => `<span class="preview-date">${esc(v.trim())}</span>`
+        );
+        text = text.replace(
+          /@([\w.\-]+)/g,
+          (_, name) => `<span class="preview-owner">@${esc(name)}</span>`
+        );
+        return text;
+      }
+
+      // ── Line parser ────────────────────────────────────────────────────────
+      function parseLine(raw) {
+        const line = raw.trimEnd();
+
+        if (line.trim() === '') return '<div style="height:0.5rem;"></div>';
+        if (/^---+$/.test(line.trim())) return '<hr class="preview-hr"/>';
+
+        if (/^# /.test(line))
+          return `<div class="preview-h1">${parseInline(esc(line.slice(2)))}</div>`;
+
+        if (/^## /.test(line))
+          return `<div class="preview-h2">${parseInline(esc(line.slice(3)))}</div>`;
+
+        if (/^Action:\s*/i.test(line)) {
+          const content = line.replace(/^Action:\s*/i, '');
+          const id = 'cb_' + Math.random().toString(36).slice(2, 8);
+          return `<div class="preview-action">
+            <div class="checkbox" id="${id}" onclick="toggleCheck('${id}')" title="Toggle done"></div>
+            <span>${parseInline(esc(content))}</span>
+          </div>`;
+        }
+
+        if (/^Decision:\s*/i.test(line)) {
+          const content = line.replace(/^Decision:\s*/i, '');
+          return `<div class="preview-decision">${parseInline(esc(content))}</div>`;
+        }
+
+        return `<p class="preview-p">${parseInline(esc(line))}</p>`;
+      }
+
+      // ── Render ─────────────────────────────────────────────────────────────
+      function render() {
+        const lines = editor.value.split('\n');
+        preview.innerHTML = lines.map(parseLine).join('');
+
+        const blocks = preview.querySelectorAll(
+          '.preview-h1, .preview-h2, .preview-action, .preview-decision'
+        ).length;
+
+        blockCount.textContent = blocks + ' block' + (blocks !== 1 ? 's' : '');
+        charCount.textContent  = editor.value.length.toLocaleString() + ' chars';
+
+        try { localStorage.setItem(STORAGE_KEY, editor.value); } catch (_) {}
+      }
+
+      // ── Checkbox toggle ────────────────────────────────────────────────────
+      window.toggleCheck = function (id) {
+        const el = document.getElementById(id);
+        if (el) el.classList.toggle('checked');
+      };
+
+      // ── Theme ──────────────────────────────────────────────────────────────
+      function applyTheme(theme) {
+        THEMES.forEach(t => document.body.classList.remove(t));
+        document.body.classList.add(theme);
+        themeSelect.value = theme;
+        try { localStorage.setItem(THEME_KEY, theme); } catch (_) {}
+      }
+
+      themeSelect.addEventListener('change', () => applyTheme(themeSelect.value));
+
+      // ── Toast ──────────────────────────────────────────────────────────────
+      function showToast(msg) {
+        const t = document.getElementById('toast');
+        t.textContent = msg;
+        t.classList.add('show');
+        setTimeout(() => t.classList.remove('show'), 2400);
+      }
+
+      // ── Buttons ────────────────────────────────────────────────────────────
+      document.getElementById('print-btn').addEventListener('click', () => window.print());
+
+      document.getElementById('copy-btn').addEventListener('click', () => {
+        navigator.clipboard.writeText(preview.innerHTML)
+          .then(() => showToast('HTML copied to clipboard!'))
+          .catch(() => showToast('Copy failed — try manually.'));
+      });
+
+      document.getElementById('clear-btn').addEventListener('click', () => {
+        if (!editor.value.trim()) return;
+        if (confirm('Clear all content? This cannot be undone.')) {
+          editor.value = '';
+          render();
+          showToast('Editor cleared.');
+        }
+      });
+
+      document.getElementById('load-sample-btn').addEventListener('click', () => {
+        editor.value = `# Q3 Strategy Meeting
+Date: 2026-01-15
+
+## Attendees
+Owner: @Alice @Bob @Carol @David
+
+## Project Updates
+Decision: Adopt the new CI/CD pipeline using GitHub Actions for all repositories.
+Action: @Bob will configure GitHub Actions workflows by 2026-01-22.
+Action: @Carol will write deployment documentation and publish to Confluence.
+
+---
+
+## Budget Review
+Decision: Increase Q4 marketing budget by 15% to support the product launch.
+Decision: Freeze non-critical hires until Q1 next year.
+Action: @Alice to prepare the revised budget proposal for board approval.
+Action: @David will schedule a follow-up call with the finance team.
+
+---
+
+## Next Steps
+Date: Next Review — 2026-01-29
+Action: @Alice to send meeting summary to all stakeholders.
+Action: @Bob to demo the new pipeline at the next team standup.`;
+        render();
+        showToast('Sample notes loaded!');
+      });
+
+      // ── Help Panel ─────────────────────────────────────────────────────────
+      const helpPanel = document.getElementById('help-panel');
+      document.getElementById('help-btn').addEventListener('click', () =>
+        helpPanel.classList.toggle('open')
+      );
+      document.getElementById('help-close-btn').addEventListener('click', () =>
+        helpPanel.classList.remove('open')
+      );
+
+      // ── Drag-to-resize divider ─────────────────────────────────────────────
+      const divider   = document.getElementById('divider');
+      const leftPane  = document.getElementById('editor-pane');
+      let dragging = false, startX = 0, startW = 0;
+
+      divider.addEventListener('mousedown', e => {
+        dragging = true;
+        startX = e.clientX;
+        startW = leftPane.getBoundingClientRect().width;
+        divider.classList.add('dragging');
+        document.body.style.userSelect = 'none';
+        document.body.style.cursor = 'col-resize';
+      });
+
+      document.addEventListener('mousemove', e => {
+        if (!dragging) return;
+        const parentW = leftPane.parentElement.getBoundingClientRect().width;
+        const newW = Math.max(180, Math.min(parentW - 180, startW + e.clientX - startX));
+        leftPane.style.flex = 'none';
+        leftPane.style.width = newW + 'px';
+      });
+
+      document.addEventListener('mouseup', () => {
+        if (!dragging) return;
+        dragging = false;
+        divider.classList.remove('dragging');
+        document.body.style.userSelect = '';
+        document.body.style.cursor = '';
+      });
+
+      // ── Keyboard shortcuts ─────────────────────────────────────────────────
+      document.addEventListener('keydown', e => {
+        if ((e.ctrlKey || e.metaKey) && e.key === 'p') {
+          e.preventDefault();
+          window.print();
+        }
+      });
+
+      editor.addEventListener('keydown', e => {
+        if (e.key === 'Tab') {
+          e.preventDefault();
+          const s = editor.selectionStart;
+          editor.value = editor.value.slice(0, s) + '  ' + editor.value.slice(editor.selectionEnd);
+          editor.selectionStart = editor.selectionEnd = s + 2;
+        }
+      });
+
+      // ── Bootstrap ─────────────────────────────────────────────────────────
+      const savedTheme = localStorage.getItem(THEME_KEY);
+      if (savedTheme && THEMES.includes(savedTheme)) applyTheme(savedTheme);
+
+      const savedContent = localStorage.getItem(STORAGE_KEY);
+      if (savedContent) editor.value = savedContent;
+
+      editor.addEventListener('input', render);
+      render();
+
+      /*
+       * ────────────────────────────────────────────────────────────────────────
+       * MONETIZATION — LemonSqueezy Pay-per-Download (commented out)
+       * ────────────────────────────────────────────────────────────────────────
+       *
+       * To enable a payment gate before PDF export:
+       *
+       * 1. Create a product in your LemonSqueezy dashboard.
+       * 2. Replace LS_STORE and LS_VARIANT with your values.
+       * 3. Add the LemonSqueezy JS snippet to <head>:
+       *    <script src="https://assets.lemonsqueezy.com/lemon.js" defer><\/script>
+       * 4. Swap the print-btn listener above for `handlePrint` below.
+       *
+       * const LS_STORE   = 'your-store-slug';
+       * const LS_VARIANT = 'your-variant-id';
+       *
+       * async function checkLSAccess() {
+       *   if (sessionStorage.getItem('mmb_access')) return true;
+       *   return new Promise(resolve => {
+       *     const overlay = document.createElement('div');
+       *     overlay.style.cssText = [
+       *       'position:fixed;inset:0;background:rgba(0,0,0,0.65);',
+       *       'display:flex;align-items:center;justify-content:center;z-index:999;'
+       *     ].join('');
+       *     overlay.innerHTML = `
+       *       <div style="background:#fff;border-radius:16px;padding:2rem 2.5rem;
+       *                   max-width:380px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,0.3);">
+       *         <div style="font-size:1.25rem;font-weight:700;margin-bottom:0.5rem;">
+       *           Export this document
+       *         </div>
+       *         <p style="color:#64748b;font-size:0.875rem;margin-bottom:1.5rem;">
+       *           Pay once to download a beautifully formatted PDF.
+       *         </p>
+       *         <a href="https://${LS_STORE}.lemonsqueezy.com/checkout/buy/${LS_VARIANT}"
+       *            class="lemonsqueezy-button"
+       *            style="display:inline-block;background:#1d4ed8;color:#fff;
+       *                   padding:0.75rem 2rem;border-radius:8px;font-weight:600;
+       *                   text-decoration:none;font-size:0.9rem;">
+       *           Pay &amp; Download — $2.99
+       *         </a>
+       *         <p style="margin-top:0.75rem;font-size:0.68rem;color:#94a3b8;">
+       *           Secure one-time payment via LemonSqueezy
+       *         </p>
+       *       </div>`;
+       *     document.body.appendChild(overlay);
+       *     window.addEventListener('LemonSqueezy.Payment.Success', e => {
+       *       sessionStorage.setItem('mmb_access', e.detail.order_id);
+       *       document.body.removeChild(overlay);
+       *       resolve(true);
+       *     });
+       *   });
+       * }
+       *
+       * async function handlePrint() {
+       *   if (await checkLSAccess()) window.print();
+       * }
+       *
+       * // Replace the print-btn listener with:
+       * // document.getElementById('print-btn').addEventListener('click', handlePrint);
+       *
+       * ────────────────────────────────────────────────────────────────────────
+       */
+    </script>
+  </body>
+</html>
